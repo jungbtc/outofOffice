@@ -45,7 +45,7 @@ Expected outputs:
 - `target\release\outofOffice.exe`
 - `target\release\bundle\nsis\outofOffice_0.1.0_x64-setup.exe`
 
-The NSIS configuration installs per user, creates a Start Menu group and uninstaller, registers `.oofdoc`, `.oofslides`, and `.oofsheet`, and embeds the WebView2 offline installer. Uninstalling does not delete documents or the user’s app-data recovery/settings directory.
+The NSIS configuration installs per user, creates a Start Menu group and uninstaller, registers `.oofdoc`, and embeds the WebView2 offline installer. Uninstalling does not delete documents or the user’s app-data recovery/settings directory.
 
 ## Code signing
 

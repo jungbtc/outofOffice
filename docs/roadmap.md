@@ -1,23 +1,30 @@
 # Roadmap
 
-## Phase 1 — foundation
+## Phase 1 — focused foundation
 
-Implemented in the current source: Tauri shell, home, tabs, native dialog bridge, SQLite recents, themes, internal package foundation, and NSIS configuration.
+Keep one document editor, one internal format, and one installer association. The current source includes the Tauri shell, document tabs, native dialogs, SQLite recents, themes, the `.oofdoc` package foundation, recovery snapshots, and NSIS configuration.
 
-## Phase 2 — functional vertical slice
+## Phase 2 — performance and reliability
 
-Implemented in the current source: basic editing and internal save/reopen for Write, Present, and Calculate; serializable undo/redo; recovery snapshots. Native compile/installer verification remains a release-machine gate.
+- Bound and group undo history so long typing sessions do not retain unlimited document copies.
+- Keep recovery listings metadata-only and load one snapshot on demand.
+- Avoid duplicated editor state and unnecessary React subscriptions.
+- Clean up listeners, timers, workers, object URLs, and editor resources when documents close.
+- Add repeated open/edit/close memory tests and large-document fixtures.
+- Exercise crash recovery and unsaved-change protection.
 
-## Phase 3 — import and export
+Performance claims require measurements on a documented machine and workload. A single ordinary document should remain comfortable on typical supported Windows hardware; memory should grow predictably with actual content and open documents.
 
-Add hardened DOCX, PPTX, XLSX, and CSV adapters plus shared PDF export. Publish fixture-backed compatibility matrices.
+## Phase 3 — document editing depth
 
-## Phase 4 — editing depth
+Move from the initial HTML editing surface toward a structured document model with granular transactions. Add reliable reusable styles, outline navigation, tables, images, links, page breaks, margins, headers, footers, page numbers, find and replace, spelling integration, zoom, keyboard navigation, and print layout.
 
-Move Write to a structured editor, complete page/table/image tools, add full presentation manipulation and notes, virtualize Calculate, expand formulas, and add live charts and templates.
+## Phase 4 — import, export, and print
+
+Add hardened DOCX and ODT adapters with fixture-backed loss reports, followed by PDF export and printing. Load conversion code only when requested. Do not advertise compatibility until automated fixtures prove the supported subset.
 
 ## Phase 5 — Windows hardening
 
-Exercise crash/forced-termination recovery, performance targets, accessibility audits, high-DPI/multi-monitor matrices, Unicode paths, installer upgrades, code signing, dependency audits, and stable releases.
+Run accessibility audits, high-DPI and multi-monitor matrices, Unicode and long-path tests, installer upgrades, code signing, dependency audits, and stable release checks on Windows 10 and 11.
 
-Experimental plugins begin only after a permission model and core editors are reliable. macOS and Linux follow Windows release hardening, not before.
+Experimental plugins begin only after the core editor has a permission model and reliable document boundaries. macOS and Linux follow Windows release hardening.

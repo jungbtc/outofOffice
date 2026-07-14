@@ -13,8 +13,6 @@
     { "path": "../../packages/commands" },
     { "path": "../../packages/file-formats" },
     { "path": "../../packages/write" },
-    { "path": "../../packages/present" },
-    { "path": "../../packages/calculate" },
     { "path": "../../packages/storage" },
     { "path": "../../packages/ui" }
   ]

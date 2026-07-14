@@ -15,6 +15,22 @@ const MAX_PACKAGE_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_ENTRY_COUNT: usize = 128;
 const MAX_JSON_BYTES: usize = 32 * 1024 * 1024;
 
+#[derive(Default)]
+struct CountingWriter {
+    bytes: usize,
+}
+
+impl Write for CountingWriter {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        self.bytes = self.bytes.saturating_add(buffer.len());
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveDocumentRequest {
@@ -39,7 +55,7 @@ pub fn validate_payload(payload: &Value) -> Result<(), AppError> {
         ));
     }
     let kind = payload_text(payload, "/kind")?;
-    if !matches!(kind, "write" | "present" | "calculate") {
+    if kind != "write" {
         return Err(AppError::Validation(format!(
             "Unknown document kind {kind}."
         )));
@@ -65,68 +81,18 @@ pub fn validate_payload(payload: &Value) -> Result<(), AppError> {
             "Document metadata lengths are invalid.".into(),
         ));
     }
-    match kind {
-        "write" => {
-            payload_text(payload, "/document/content/html")?;
-            if !payload
-                .pointer("/document/page")
-                .is_some_and(Value::is_object)
-            {
-                return Err(AppError::Validation(
-                    "Write page settings are missing.".into(),
-                ));
-            }
-        }
-        "present" => {
-            let slides = payload
-                .pointer("/document/slides")
-                .and_then(Value::as_array)
-                .ok_or_else(|| {
-                    AppError::Validation("Presentation slides must be an array.".into())
-                })?;
-            if slides.is_empty()
-                || slides.len() > 500
-                || slides.iter().any(|slide| !slide.is_object())
-            {
-                return Err(AppError::Validation(
-                    "Presentation slide count or structure is invalid.".into(),
-                ));
-            }
-        }
-        "calculate" => {
-            let sheets = payload
-                .pointer("/document/sheets")
-                .and_then(Value::as_array)
-                .ok_or_else(|| {
-                    AppError::Validation("Spreadsheet sheets must be an array.".into())
-                })?;
-            if sheets.is_empty() || sheets.len() > 500 {
-                return Err(AppError::Validation(
-                    "Spreadsheet worksheet count is invalid.".into(),
-                ));
-            }
-            let populated = sheets.iter().try_fold(0_usize, |total, sheet| {
-                let count = sheet
-                    .get("cells")
-                    .and_then(Value::as_object)
-                    .ok_or_else(|| {
-                        AppError::Validation("Worksheet cells must be an object.".into())
-                    })?
-                    .len();
-                total
-                    .checked_add(count)
-                    .ok_or_else(|| AppError::Validation("Cell count overflow.".into()))
-            })?;
-            if populated > 1_000_000 {
-                return Err(AppError::Validation(
-                    "Spreadsheet exceeds one million populated cells.".into(),
-                ));
-            }
-        }
-        _ => unreachable!("kind was validated above"),
+    payload_text(payload, "/document/content/html")?;
+    if !payload
+        .pointer("/document/page")
+        .is_some_and(Value::is_object)
+    {
+        return Err(AppError::Validation(
+            "Write page settings are missing.".into(),
+        ));
     }
-    let serialized = serde_json::to_vec(payload)?;
-    if serialized.len() > MAX_JSON_BYTES {
+    let mut counter = CountingWriter::default();
+    serde_json::to_writer(&mut counter, payload)?;
+    if counter.bytes > MAX_JSON_BYTES {
         return Err(AppError::Validation(
             "Document data exceeds the 32 MiB limit.".into(),
         ));
@@ -135,11 +101,11 @@ pub fn validate_payload(payload: &Value) -> Result<(), AppError> {
 }
 
 fn expected_extension(payload: &Value) -> Result<&'static str, AppError> {
-    match payload_text(payload, "/kind")? {
-        "write" => Ok("oofdoc"),
-        "present" => Ok("oofslides"),
-        "calculate" => Ok("oofsheet"),
-        kind => Err(AppError::Validation(format!("Unknown kind {kind}."))),
+    let kind = payload_text(payload, "/kind")?;
+    if kind == "write" {
+        Ok("oofdoc")
+    } else {
+        Err(AppError::Validation(format!("Unknown kind {kind}.")))
     }
 }
 
@@ -195,17 +161,18 @@ fn write_package_file(path: &Path, payload: &Value) -> Result<(), AppError> {
         "createdBy": "outofOffice 0.1.0"
     });
     archive.start_file("manifest.json", options)?;
-    archive.write_all(&serde_json::to_vec_pretty(&manifest)?)?;
+    serde_json::to_writer_pretty(&mut archive, &manifest)?;
     archive.start_file("content.json", options)?;
-    archive.write_all(&serde_json::to_vec(payload)?)?;
+    serde_json::to_writer(&mut archive, payload)?;
     archive.start_file("styles.json", options)?;
     archive.write_all(b"{\"schemaVersion\":1}")?;
     archive.start_file("metadata.json", options)?;
-    archive.write_all(&serde_json::to_vec(
+    serde_json::to_writer(
+        &mut archive,
         payload
             .pointer("/document/metadata")
             .unwrap_or(&Value::Null),
-    )?)?;
+    )?;
     archive.add_directory("media/", options)?;
     archive.add_directory("previews/", options)?;
     let file = archive.finish()?;
@@ -263,6 +230,7 @@ pub fn load_package(path: &Path) -> Result<Value, AppError> {
         ));
     }
     let payload: Value = serde_json::from_slice(&bytes)?;
+    drop(bytes);
     validate_payload(&payload)?;
     validate_extension(path, &payload)?;
     Ok(payload)
@@ -326,7 +294,15 @@ mod tests {
 
     #[test]
     fn rejects_mismatched_kinds() {
-        let payload = json!({"schemaVersion": 1, "kind": "write", "document": {"kind": "present"}});
+        let payload = json!({"schemaVersion": 1, "kind": "write", "document": {"kind": "unsupported"}});
+        assert!(validate_payload(&payload).is_err());
+    }
+
+    #[test]
+    fn rejects_non_write_packages() {
+        let mut payload = sample("Unsupported");
+        payload["kind"] = json!("unsupported");
+        payload["document"]["kind"] = json!("unsupported");
         assert!(validate_payload(&payload).is_err());
     }
 

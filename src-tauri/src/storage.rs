@@ -38,7 +38,6 @@ pub struct RecoveryRecord {
     kind: String,
     original_path: Option<String>,
     saved_at: i64,
-    payload: Value,
 }
 
 fn timestamp() -> i64 {
@@ -76,7 +75,7 @@ pub fn initialize_database(app: &tauri::AppHandle) -> Result<(), AppError> {
         "CREATE TABLE IF NOT EXISTS recent_files (
             path TEXT PRIMARY KEY NOT NULL,
             title TEXT NOT NULL,
-            kind TEXT NOT NULL CHECK(kind IN ('write','present','calculate')),
+            kind TEXT NOT NULL CHECK(kind = 'write'),
             last_opened INTEGER NOT NULL,
             pinned INTEGER NOT NULL DEFAULT 0
          );
@@ -84,7 +83,7 @@ pub fn initialize_database(app: &tauri::AppHandle) -> Result<(), AppError> {
             id TEXT PRIMARY KEY NOT NULL,
             document_id TEXT UNIQUE NOT NULL,
             title TEXT NOT NULL,
-            kind TEXT NOT NULL CHECK(kind IN ('write','present','calculate')),
+            kind TEXT NOT NULL CHECK(kind = 'write'),
             original_path TEXT,
             saved_at INTEGER NOT NULL
          );
@@ -112,7 +111,7 @@ pub fn record_recent(app: &tauri::AppHandle, path: &Path, payload: &Value) -> Re
 pub fn list_recent(app: &tauri::AppHandle) -> Result<Vec<RecentFile>, AppError> {
     let connection = database(app)?;
     let mut statement = connection.prepare(
-        "SELECT path,title,kind,last_opened,pinned FROM recent_files
+        "SELECT path,title,kind,last_opened,pinned FROM recent_files WHERE kind='write'
          ORDER BY pinned DESC,last_opened DESC LIMIT 30",
     )?;
     let rows = statement.query_map([], |row| {
@@ -129,7 +128,7 @@ pub fn list_recent(app: &tauri::AppHandle) -> Result<Vec<RecentFile>, AppError> 
 
 pub fn set_pinned(app: &tauri::AppHandle, path: &str, pinned: bool) -> Result<(), AppError> {
     let changed = database(app)?.execute(
-        "UPDATE recent_files SET pinned=?1 WHERE path=?2",
+        "UPDATE recent_files SET pinned=?1 WHERE path=?2 AND kind='write'",
         params![pinned, path],
     )?;
     if changed == 0 {
@@ -141,13 +140,12 @@ pub fn set_pinned(app: &tauri::AppHandle, path: &str, pinned: bool) -> Result<()
 }
 
 fn extension_for_kind(kind: &str) -> Result<&'static str, AppError> {
-    match kind {
-        "write" => Ok("oofdoc"),
-        "present" => Ok("oofslides"),
-        "calculate" => Ok("oofsheet"),
-        _ => Err(AppError::Validation(
+    if kind == "write" {
+        Ok("oofdoc")
+    } else {
+        Err(AppError::Validation(
             "Unknown recovery document kind.".into(),
-        )),
+        ))
     }
 }
 
@@ -170,15 +168,21 @@ pub fn save_recovery_record(
             |row| row.get(0),
         )
         .optional()?;
+    let is_new = existing.is_none();
     let id = existing.unwrap_or_else(|| Uuid::new_v4().to_string());
     let path = snapshot_path(&recovery_dir(app)?, &id, &kind)?;
     save_package(&path, &request.payload)?;
     let saved_at = timestamp();
-    connection.execute(
+    if let Err(error) = connection.execute(
         "INSERT INTO recovery(id,document_id,title,kind,original_path,saved_at) VALUES(?1,?2,?3,?4,?5,?6)
          ON CONFLICT(document_id) DO UPDATE SET title=excluded.title,kind=excluded.kind,original_path=excluded.original_path,saved_at=excluded.saved_at",
         params![id, document_id, title, kind, request.original_path, saved_at],
-    )?;
+    ) {
+        if is_new {
+            let _ = remove_if_present(&path);
+        }
+        return Err(error.into());
+    }
     prune_recoveries(app, &connection)?;
     Ok(saved_at)
 }
@@ -187,7 +191,9 @@ fn prune_recoveries(app: &tauri::AppHandle, connection: &Connection) -> Result<(
     let directory = recovery_dir(app)?;
     let stale: Vec<(String, String)> = {
         let mut statement = connection
-            .prepare("SELECT id,kind FROM recovery ORDER BY saved_at DESC LIMIT -1 OFFSET 20")?;
+            .prepare(
+                "SELECT id,kind FROM recovery WHERE kind='write' ORDER BY saved_at DESC LIMIT -1 OFFSET 20",
+            )?;
         let collected = statement
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<Result<Vec<_>, _>>()?;
@@ -202,44 +208,50 @@ fn prune_recoveries(app: &tauri::AppHandle, connection: &Connection) -> Result<(
 
 pub fn list_recovery_records(app: &tauri::AppHandle) -> Result<Vec<RecoveryRecord>, AppError> {
     let connection = database(app)?;
-    let rows: Vec<(String, String, String, String, Option<String>, i64)> = {
-        let mut statement = connection.prepare("SELECT id,document_id,title,kind,original_path,saved_at FROM recovery ORDER BY saved_at DESC")?;
-        let collected = statement
-            .query_map([], |row| {
-                Ok((
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                    row.get(4)?,
-                    row.get(5)?,
-                ))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        collected
-    };
-    let directory = recovery_dir(app)?;
-    rows.into_iter()
-        .map(|(id, document_id, title, kind, original_path, saved_at)| {
-            let payload = load_package(&snapshot_path(&directory, &id, &kind)?)?;
-            Ok(RecoveryRecord {
-                id,
-                document_id,
-                title,
-                kind,
-                original_path,
-                saved_at,
-                payload,
-            })
+    let mut statement = connection.prepare(
+        "SELECT id,document_id,title,kind,original_path,saved_at FROM recovery
+         WHERE kind='write' ORDER BY saved_at DESC",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok(RecoveryRecord {
+            id: row.get(0)?,
+            document_id: row.get(1)?,
+            title: row.get(2)?,
+            kind: row.get(3)?,
+            original_path: row.get(4)?,
+            saved_at: row.get(5)?,
         })
-        .collect()
+    })?;
+    let records = rows.collect::<Result<Vec<_>, _>>()?;
+    let directory = recovery_dir(app)?;
+    Ok(records
+        .into_iter()
+        .filter(|record| {
+            snapshot_path(&directory, &record.id, &record.kind)
+                .is_ok_and(|path| path.is_file())
+        })
+        .collect())
+}
+
+pub fn load_recovery_record(app: &tauri::AppHandle, id: &str) -> Result<Value, AppError> {
+    let connection = database(app)?;
+    let kind: Option<String> = connection
+        .query_row(
+            "SELECT kind FROM recovery WHERE id=?1 AND kind='write'",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let kind =
+        kind.ok_or_else(|| AppError::Validation("The recovery entry no longer exists.".into()))?;
+    load_package(&snapshot_path(&recovery_dir(app)?, id, &kind)?)
 }
 
 pub fn clear_recovery_record(app: &tauri::AppHandle, document_id: &str) -> Result<(), AppError> {
     let connection = database(app)?;
     let row: Option<(String, String)> = connection
         .query_row(
-            "SELECT id,kind FROM recovery WHERE document_id=?1",
+            "SELECT id,kind FROM recovery WHERE document_id=?1 AND kind='write'",
             [document_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
@@ -254,9 +266,11 @@ pub fn clear_recovery_record(app: &tauri::AppHandle, document_id: &str) -> Resul
 pub fn discard_recovery_record(app: &tauri::AppHandle, id: &str) -> Result<(), AppError> {
     let connection = database(app)?;
     let kind: Option<String> = connection
-        .query_row("SELECT kind FROM recovery WHERE id=?1", [id], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "SELECT kind FROM recovery WHERE id=?1 AND kind='write'",
+            [id],
+            |row| row.get(0),
+        )
         .optional()?;
     let kind =
         kind.ok_or_else(|| AppError::Validation("The recovery entry no longer exists.".into()))?;
@@ -270,5 +284,33 @@ fn remove_if_present(path: &Path) -> Result<(), AppError> {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error.into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recovery_extensions_are_write_only() {
+        assert_eq!(
+            extension_for_kind("write").expect("write extension"),
+            "oofdoc"
+        );
+        assert!(extension_for_kind("unsupported").is_err());
+    }
+
+    #[test]
+    fn recovery_metadata_does_not_serialize_a_payload() {
+        let record = RecoveryRecord {
+            id: "recovery-test".into(),
+            document_id: "document-test".into(),
+            title: "Draft".into(),
+            kind: "write".into(),
+            original_path: None,
+            saved_at: 0,
+        };
+        let serialized = serde_json::to_value(record).expect("serialize recovery metadata");
+        assert!(serialized.get("payload").is_none());
     }
 }

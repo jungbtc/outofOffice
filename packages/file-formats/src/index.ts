@@ -1,4 +1,4 @@
-import { validateDocument, type OfficeDocument } from "@outofoffice/document-model";
+import { validateDocument, type WriteDocument } from "@outofoffice/document-model";
 import type { DocumentKind } from "@outofoffice/shared";
 
 export const PACKAGE_SCHEMA_VERSION = 1;
@@ -6,18 +6,18 @@ export const PACKAGE_SCHEMA_VERSION = 1;
 export interface InternalPackagePayload {
   schemaVersion: 1;
   kind: DocumentKind;
-  document: OfficeDocument;
+  document: WriteDocument;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function serializeDocument(document: OfficeDocument): InternalPackagePayload {
+export function serializeDocument(document: WriteDocument): InternalPackagePayload {
   return {
     schemaVersion: PACKAGE_SCHEMA_VERSION,
-    kind: document.kind,
-    document: structuredClone(document),
+    kind: "write",
+    document,
   };
 }
 
@@ -27,8 +27,8 @@ export function parsePackagePayload(value: unknown): InternalPackagePayload {
   if (migrated.schemaVersion !== PACKAGE_SCHEMA_VERSION)
     throw new Error(`Unsupported package schema version ${String(migrated.schemaVersion)}.`);
   const document = validateDocument(migrated.document);
-  if (migrated.kind !== document.kind)
-    throw new Error("Package kind does not match document content.");
+  if (migrated.kind !== "write")
+    throw new Error("Only outofOffice Write documents are supported by this application.");
   return serializeDocument(document);
 }
 
@@ -40,7 +40,7 @@ export const packageJsonSchema = {
   additionalProperties: false,
   properties: {
     schemaVersion: { const: 1 },
-    kind: { enum: ["write", "present", "calculate"] },
+    kind: { const: "write" },
     document: { type: "object" },
   },
 } as const;

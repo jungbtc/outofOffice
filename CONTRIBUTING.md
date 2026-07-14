@@ -1,6 +1,6 @@
 # Contributing to outofOffice
 
-Thank you for helping build an independent, local-first office suite.
+Thank you for helping build an independent, local-first word processor.
 
 ## Before opening a change
 

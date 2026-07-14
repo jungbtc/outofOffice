@@ -14,12 +14,15 @@ export interface LoadedPackage {
   payload: InternalPackagePayload;
 }
 
-export interface RecoveryRecord {
+export interface RecoverySummary {
   id: string;
   documentId: string;
   title: string;
   kind: DocumentKind;
   originalPath: string | null;
   savedAt: number;
+}
+
+export interface LoadedRecovery extends RecoverySummary {
   payload: InternalPackagePayload;
 }

@@ -1,9 +1,0 @@
-{
-  "name": "@outofoffice/calculate",
-  "version": "0.1.0",
-  "type": "module",
-  "exports": "./src/index.ts",
-  "dependencies": {
-    "@outofoffice/document-model": "workspace:*"
-  }
-}

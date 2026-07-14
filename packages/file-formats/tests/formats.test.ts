@@ -3,17 +3,20 @@ import { createDocument } from "@outofoffice/document-model";
 import { parsePackagePayload, serializeDocument } from "../src";
 
 describe("internal format payload", () => {
-  it("round trips all document types", () => {
-    for (const kind of ["write", "present", "calculate"] as const) {
-      const payload = serializeDocument(createDocument(kind));
-      expect(parsePackagePayload(JSON.parse(JSON.stringify(payload)))).toEqual(payload);
-    }
+  it("round trips Write documents without an extra full-document clone", () => {
+    const document = createDocument();
+    const payload = serializeDocument(document);
+    expect(payload.document).toBe(document);
+    expect(parsePackagePayload(JSON.parse(JSON.stringify(payload)))).toEqual(payload);
   });
 
-  it("migrates legacy package envelopes", () => {
-    const document = createDocument("write");
+  it("migrates legacy envelopes and rejects retired module kinds", () => {
+    const document = createDocument();
     expect(parsePackagePayload({ schemaVersion: 0, kind: "write", document }).schemaVersion).toBe(
       1,
+    );
+    expect(() => parsePackagePayload({ schemaVersion: 1, kind: "unsupported", document })).toThrow(
+      /Only.*Write/,
     );
   });
 });

@@ -1,18 +1,16 @@
 export const PRODUCT = {
-  displayName: "outofOffice",
+  displayName: "outofOffice Write",
   executable: "outofOffice.exe",
   packageId: "com.outofoffice.desktop",
   slug: "outofoffice",
   version: "0.1.0",
-  modules: { write: "Write", present: "Present", calculate: "Calculate" },
+  modules: { write: "Write" },
 } as const;
 
-export type DocumentKind = keyof typeof PRODUCT.modules;
+export type DocumentKind = "write";
 
 export const FILE_EXTENSIONS: Record<DocumentKind, string> = {
   write: "oofdoc",
-  present: "oofslides",
-  calculate: "oofsheet",
 };
 
 export function createId(prefix: string): string {

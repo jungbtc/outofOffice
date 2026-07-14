@@ -2,15 +2,15 @@ mod errors;
 mod package;
 mod storage;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use errors::AppError;
 use package::{load_package, save_package, LoadedPackage, SaveDocumentRequest};
 use serde_json::Value;
 use storage::{
     clear_recovery_record, discard_recovery_record, initialize_database, list_recent,
-    list_recovery_records, record_recent, save_recovery_record, set_pinned, RecentFile,
-    RecoveryRecord, SaveRecoveryRequest,
+    list_recovery_records, load_recovery_record, record_recent, save_recovery_record, set_pinned,
+    RecentFile, RecoveryRecord, SaveRecoveryRequest,
 };
 
 #[tauri::command]
@@ -53,6 +53,11 @@ fn list_recoveries(app: tauri::AppHandle) -> Result<Vec<RecoveryRecord>, AppErro
 }
 
 #[tauri::command]
+fn load_recovery(app: tauri::AppHandle, id: String) -> Result<Value, AppError> {
+    load_recovery_record(&app, &id)
+}
+
+#[tauri::command]
 fn clear_recovery(app: tauri::AppHandle, document_id: String) -> Result<(), AppError> {
     clear_recovery_record(&app, &document_id)
 }
@@ -67,19 +72,15 @@ fn list_launch_files() -> Vec<String> {
     std::env::args_os()
         .skip(1)
         .map(PathBuf::from)
-        .filter(|path| {
-            path.extension()
-                .and_then(|extension| extension.to_str())
-                .map(|extension| {
-                    matches!(
-                        extension.to_ascii_lowercase().as_str(),
-                        "oofdoc" | "oofslides" | "oofsheet"
-                    )
-                })
-                .unwrap_or(false)
-        })
+        .filter(|path| is_supported_launch_path(path))
         .map(|path| path.to_string_lossy().into_owned())
         .collect()
+}
+
+fn is_supported_launch_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("oofdoc"))
 }
 
 pub fn run() {
@@ -96,6 +97,7 @@ pub fn run() {
             set_recent_pinned,
             save_recovery,
             list_recoveries,
+            load_recovery,
             clear_recovery,
             discard_recovery,
             list_launch_files
@@ -109,4 +111,16 @@ fn payload_text<'a>(payload: &'a Value, pointer: &str) -> Result<&'a str, AppErr
         .pointer(pointer)
         .and_then(Value::as_str)
         .ok_or_else(|| AppError::Validation(format!("Missing or invalid {pointer}.")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn launch_filter_accepts_only_write_packages() {
+        assert!(is_supported_launch_path(Path::new("document.OOFDOC")));
+        assert!(!is_supported_launch_path(Path::new("document.unsupported")));
+        assert!(!is_supported_launch_path(Path::new("document")));
+    }
 }

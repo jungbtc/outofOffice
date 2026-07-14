@@ -6,7 +6,7 @@ Security fixes currently target the latest `0.1.x` source and preview release.
 
 ## Reporting
 
-Do not open a public issue for a suspected archive, XML, HTML, formula, path, recovery, or installer vulnerability. Use the repository host’s private security advisory feature. Include the affected version, a minimal non-sensitive fixture, impact, and reproduction steps. Do not include real user documents.
+Do not open a public issue for a suspected archive, XML, HTML, path, recovery, or installer vulnerability. Use the repository host’s private security advisory feature. Include the affected version, a minimal non-sensitive fixture, impact, and reproduction steps. Do not include real user documents.
 
 Maintainers should acknowledge a report within seven days, provide a triage update within fourteen days, and coordinate disclosure after a fix is available. These are targets, not a warranty.
 

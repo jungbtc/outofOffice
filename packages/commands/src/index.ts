@@ -1,13 +1,5 @@
-import {
-  cloneDocument,
-  touchDocument,
-  type Cell,
-  type OfficeDocument,
-  type Slide,
-  type SlideObject,
-  type Worksheet,
-} from "@outofoffice/document-model";
-import { assertNever, createId } from "@outofoffice/shared";
+import type { WriteDocument } from "@outofoffice/document-model";
+import { createId } from "@outofoffice/shared";
 
 interface CommandBase {
   id: string;
@@ -15,126 +7,164 @@ interface CommandBase {
   timestamp: string;
 }
 
-export type EditorCommand =
-  | (CommandBase & { type: "set-write-content"; before: string; after: string })
-  | (CommandBase & { type: "add-slide"; slide: Slide; index: number })
-  | (CommandBase & { type: "delete-slide"; slide: Slide; index: number })
-  | (CommandBase & { type: "add-slide-object"; slideId: string; object: SlideObject })
-  | (CommandBase & { type: "delete-slide-object"; slideId: string; object: SlideObject })
-  | (CommandBase & {
-      type: "update-slide-object";
-      slideId: string;
-      before: SlideObject;
-      after: SlideObject;
-    })
-  | (CommandBase & {
-      type: "set-cell";
-      sheetId: string;
-      address: string;
-      before: Cell | null;
-      after: Cell | null;
-    })
-  | (CommandBase & { type: "add-sheet"; sheet: Worksheet; index: number })
-  | (CommandBase & { type: "delete-sheet"; sheet: Worksheet; index: number })
-  | (CommandBase & { type: "rename-sheet"; sheetId: string; before: string; after: string });
+export interface TextPatch {
+  start: number;
+  removed: string;
+  inserted: string;
+  beforeLength: number;
+  afterLength: number;
+}
+
+export type EditorCommand = CommandBase & {
+  type: "set-write-content";
+  patch: TextPatch;
+};
+
+export interface SetWriteContentInput {
+  type: "set-write-content";
+  before: string;
+  after: string;
+}
 
 export interface CommandHistory {
   past: EditorCommand[];
   future: EditorCommand[];
 }
 
+/** A second limit keeps many tiny edits from accumulating object overhead indefinitely. */
+export const MAX_HISTORY_ENTRIES = 250;
+
+/** Approximate retained command data, using the worst-case two bytes per UTF-16 code unit. */
+export const MAX_HISTORY_BYTES = 4 * 1024 * 1024;
+
+const COMMAND_OBJECT_OVERHEAD_BYTES = 64;
+const UTF16_CODE_UNIT_BYTES = 2;
+
 export const emptyHistory = (): CommandHistory => ({ past: [], future: [] });
 
-export function command<T extends Omit<EditorCommand, keyof CommandBase>>(
-  value: T,
-  label: string,
-): T & CommandBase {
-  return { ...value, id: createId("command"), label, timestamp: new Date().toISOString() };
-}
+export function createTextPatch(before: string, after: string): TextPatch {
+  let start = 0;
+  const sharedLength = Math.min(before.length, after.length);
+  while (start < sharedLength && before.charCodeAt(start) === after.charCodeAt(start)) start += 1;
 
-function locateSlide(document: OfficeDocument, slideId: string): Slide {
-  if (document.kind !== "present") throw new Error("A slide command requires a presentation.");
-  const slide = document.slides.find((item) => item.id === slideId);
-  if (!slide) throw new Error(`Slide ${slideId} no longer exists.`);
-  return slide;
-}
-
-function apply(document: OfficeDocument, item: EditorCommand, reverse: boolean): OfficeDocument {
-  const next = cloneDocument(document);
-  switch (item.type) {
-    case "set-write-content":
-      if (next.kind !== "write") throw new Error("A writing command requires a document.");
-      next.content.html = reverse ? item.before : item.after;
-      break;
-    case "add-slide":
-    case "delete-slide": {
-      if (next.kind !== "present") throw new Error("A slide command requires a presentation.");
-      const shouldAdd = (item.type === "add-slide") !== reverse;
-      if (shouldAdd) next.slides.splice(item.index, 0, structuredClone(item.slide));
-      else next.slides = next.slides.filter((slide) => slide.id !== item.slide.id);
-      break;
-    }
-    case "add-slide-object":
-    case "delete-slide-object": {
-      const slide = locateSlide(next, item.slideId);
-      const shouldAdd = (item.type === "add-slide-object") !== reverse;
-      if (shouldAdd) slide.objects.push(structuredClone(item.object));
-      else slide.objects = slide.objects.filter((object) => object.id !== item.object.id);
-      break;
-    }
-    case "update-slide-object": {
-      const slide = locateSlide(next, item.slideId);
-      const replacement = reverse ? item.before : item.after;
-      const index = slide.objects.findIndex((object) => object.id === replacement.id);
-      if (index < 0) throw new Error(`Object ${replacement.id} no longer exists.`);
-      slide.objects[index] = structuredClone(replacement);
-      break;
-    }
-    case "set-cell": {
-      if (next.kind !== "calculate") throw new Error("A cell command requires a spreadsheet.");
-      const sheet = next.sheets.find((candidate) => candidate.id === item.sheetId);
-      if (!sheet) throw new Error(`Worksheet ${item.sheetId} no longer exists.`);
-      const value = reverse ? item.before : item.after;
-      if (value) sheet.cells[item.address] = structuredClone(value);
-      else delete sheet.cells[item.address];
-      break;
-    }
-    case "add-sheet":
-    case "delete-sheet": {
-      if (next.kind !== "calculate") throw new Error("A worksheet command requires a spreadsheet.");
-      const shouldAdd = (item.type === "add-sheet") !== reverse;
-      if (shouldAdd) next.sheets.splice(item.index, 0, structuredClone(item.sheet));
-      else next.sheets = next.sheets.filter((sheet) => sheet.id !== item.sheet.id);
-      break;
-    }
-    case "rename-sheet": {
-      if (next.kind !== "calculate") throw new Error("A worksheet command requires a spreadsheet.");
-      const sheet = next.sheets.find((candidate) => candidate.id === item.sheetId);
-      if (!sheet) throw new Error(`Worksheet ${item.sheetId} no longer exists.`);
-      sheet.name = reverse ? item.before : item.after;
-      break;
-    }
-    default:
-      assertNever(item);
+  let beforeEnd = before.length;
+  let afterEnd = after.length;
+  while (
+    beforeEnd > start &&
+    afterEnd > start &&
+    before.charCodeAt(beforeEnd - 1) === after.charCodeAt(afterEnd - 1)
+  ) {
+    beforeEnd -= 1;
+    afterEnd -= 1;
   }
-  return touchDocument(next);
+
+  return {
+    start,
+    removed: before.slice(start, beforeEnd),
+    inserted: after.slice(start, afterEnd),
+    beforeLength: before.length,
+    afterLength: after.length,
+  };
+}
+
+export function command(value: SetWriteContentInput, label: string): EditorCommand {
+  return {
+    type: value.type,
+    patch: createTextPatch(value.before, value.after),
+    id: createId("command"),
+    label,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+export function writeContentCommand(before: string, after: string, label: string): EditorCommand {
+  return command({ type: "set-write-content", before, after }, label);
+}
+
+export function measureCommandBytes(item: EditorCommand): number {
+  return (
+    COMMAND_OBJECT_OVERHEAD_BYTES +
+    UTF16_CODE_UNIT_BYTES *
+      (item.id.length +
+        item.label.length +
+        item.timestamp.length +
+        item.patch.removed.length +
+        item.patch.inserted.length)
+  );
+}
+
+export function historyBytes(history: CommandHistory): number {
+  let bytes = 0;
+  for (const item of history.past) bytes += measureCommandBytes(item);
+  for (const item of history.future) bytes += measureCommandBytes(item);
+  return bytes;
+}
+
+function isNoOp(item: EditorCommand): boolean {
+  return item.patch.removed.length === 0 && item.patch.inserted.length === 0;
+}
+
+function applyPatch(html: string, patch: TextPatch, reverse: boolean): string {
+  const expectedLength = reverse ? patch.afterLength : patch.beforeLength;
+  const expected = reverse ? patch.inserted : patch.removed;
+  const replacement = reverse ? patch.removed : patch.inserted;
+
+  if (
+    html.length !== expectedLength ||
+    patch.start < 0 ||
+    patch.start + expected.length > html.length ||
+    html.slice(patch.start, patch.start + expected.length) !== expected
+  ) {
+    throw new Error("The document no longer matches this history entry.");
+  }
+
+  return html.slice(0, patch.start) + replacement + html.slice(patch.start + expected.length);
+}
+
+function apply(document: WriteDocument, item: EditorCommand, reverse: boolean): WriteDocument {
+  const html = applyPatch(document.content.html, item.patch, reverse);
+  return {
+    ...document,
+    metadata: { ...document.metadata, modifiedAt: new Date().toISOString() },
+    content: { ...document.content, html },
+  };
+}
+
+function appendWithinLimits(past: readonly EditorCommand[], item: EditorCommand): EditorCommand[] {
+  const itemBytes = measureCommandBytes(item);
+  if (itemBytes > MAX_HISTORY_BYTES) return [];
+
+  const retained = [item];
+  let bytes = itemBytes;
+  for (let index = past.length - 1; index >= 0; index -= 1) {
+    if (retained.length >= MAX_HISTORY_ENTRIES) break;
+    const candidate = past[index];
+    if (!candidate) continue;
+    const candidateBytes = measureCommandBytes(candidate);
+    if (bytes + candidateBytes > MAX_HISTORY_BYTES) break;
+    retained.push(candidate);
+    bytes += candidateBytes;
+  }
+  retained.reverse();
+  return retained;
 }
 
 export function executeCommand(
-  document: OfficeDocument,
+  document: WriteDocument,
   history: CommandHistory,
   item: EditorCommand,
-): { document: OfficeDocument; history: CommandHistory } {
+): { document: WriteDocument; history: CommandHistory } {
+  if (isNoOp(item)) return { document, history };
   return {
     document: apply(document, item, false),
-    history: { past: [...history.past, item].slice(-500), future: [] },
+    history: { past: appendWithinLimits(history.past, item), future: [] },
   };
 }
 
 export function undoCommand(
-  document: OfficeDocument,
+  document: WriteDocument,
   history: CommandHistory,
-): { document: OfficeDocument; history: CommandHistory } {
+): { document: WriteDocument; history: CommandHistory } {
   const item = history.past.at(-1);
   if (!item) return { document, history };
   return {
@@ -144,9 +174,9 @@ export function undoCommand(
 }
 
 export function redoCommand(
-  document: OfficeDocument,
+  document: WriteDocument,
   history: CommandHistory,
-): { document: OfficeDocument; history: CommandHistory } {
+): { document: WriteDocument; history: CommandHistory } {
   const item = history.future[0];
   if (!item) return { document, history };
   return {

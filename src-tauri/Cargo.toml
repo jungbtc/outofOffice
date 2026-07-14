@@ -1,7 +1,7 @@
 [package]
 name = "outofoffice"
 version = "0.1.0"
-description = "A local-first open-source office suite"
+description = "A fast, local-first open-source word processor"
 authors = ["outofOffice contributors"]
 edition = "2021"
 license = "AGPL-3.0-only"

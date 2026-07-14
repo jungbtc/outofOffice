@@ -3,14 +3,27 @@ export interface TextStatistics {
   characters: number;
 }
 
-export function textStatistics(html: string): TextStatistics {
-  const text = html
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/\s+/g, " ")
-    .trim();
-  return { words: text ? text.split(" ").length : 0, characters: text.length };
+/** Counts already-extracted plain text in one pass without allocating a word array. */
+export function textStatistics(text: string): TextStatistics {
+  let words = 0;
+  let inWord = false;
+  let firstNonWhitespace = -1;
+  let lastNonWhitespace = -1;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const whitespace = /\s/u.test(text[index] ?? "");
+    if (!whitespace) {
+      if (!inWord) words += 1;
+      inWord = true;
+      if (firstNonWhitespace < 0) firstNonWhitespace = index;
+      lastNonWhitespace = index;
+    } else {
+      inWord = false;
+    }
+  }
+
+  return {
+    words,
+    characters: firstNonWhitespace < 0 ? 0 : lastNonWhitespace - firstNonWhitespace + 1,
+  };
 }

@@ -1,31 +1,26 @@
 import { invoke } from "@tauri-apps/api/core";
-import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import type { InternalPackagePayload } from "@outofoffice/file-formats";
-import { FILE_EXTENSIONS, type DocumentKind } from "@outofoffice/shared";
-import type { LoadedPackage, RecentFile, RecoveryRecord } from "@outofoffice/storage";
+import { FILE_EXTENSIONS } from "@outofoffice/shared";
+import type { LoadedPackage, RecentFile, RecoverySummary } from "@outofoffice/storage";
 
 export const isTauri = (): boolean =>
   typeof window !== "undefined" && window.__TAURI_INTERNALS__ !== undefined;
 
-const filters = [
-  { name: "outofOffice files", extensions: Object.values(FILE_EXTENSIONS) },
-  { name: "Write document", extensions: [FILE_EXTENSIONS.write] },
-  { name: "Presentation", extensions: [FILE_EXTENSIONS.present] },
-  { name: "Spreadsheet", extensions: [FILE_EXTENSIONS.calculate] },
-];
+const filters = [{ name: "outofOffice Write documents", extensions: [FILE_EXTENSIONS.write] }];
 
 export async function selectOpenPath(): Promise<string | null> {
   if (!isTauri()) return null;
+  const { open } = await import("@tauri-apps/plugin-dialog");
   const result = await open({ multiple: false, directory: false, filters });
   return typeof result === "string" ? result : null;
 }
 
-export async function selectSavePath(kind: DocumentKind, title: string): Promise<string | null> {
+export async function selectSavePath(title: string): Promise<string | null> {
   if (!isTauri()) return null;
-  const extension = FILE_EXTENSIONS[kind];
+  const { save } = await import("@tauri-apps/plugin-dialog");
   return save({
-    defaultPath: `${title}.${extension}`,
-    filters: [{ name: `${kind} file`, extensions: [extension] }],
+    defaultPath: `${title}.${FILE_EXTENSIONS.write}`,
+    filters,
   });
 }
 
@@ -52,8 +47,12 @@ export async function saveRecovery(
   return invoke<number>("save_recovery", { request: { payload, originalPath } });
 }
 
-export async function listRecoveries(): Promise<RecoveryRecord[]> {
-  return isTauri() ? invoke<RecoveryRecord[]>("list_recoveries") : [];
+export async function listRecoveries(): Promise<RecoverySummary[]> {
+  return isTauri() ? invoke<RecoverySummary[]>("list_recoveries") : [];
+}
+
+export async function loadRecovery(id: string): Promise<InternalPackagePayload> {
+  return invoke<InternalPackagePayload>("load_recovery", { id });
 }
 
 export async function clearRecovery(documentId: string): Promise<void> {
@@ -70,12 +69,12 @@ export async function listLaunchFiles(): Promise<string[]> {
 
 export async function askToDiscardChanges(title: string): Promise<boolean> {
   const message = `Discard unsaved changes to “${title}”?`;
-  return isTauri()
-    ? confirm(message, {
-        title: "Unsaved changes",
-        kind: "warning",
-        okLabel: "Discard",
-        cancelLabel: "Keep editing",
-      })
-    : window.confirm(message);
+  if (!isTauri()) return window.confirm(message);
+  const { confirm } = await import("@tauri-apps/plugin-dialog");
+  return confirm(message, {
+    title: "Unsaved changes",
+    kind: "warning",
+    okLabel: "Discard",
+    cancelLabel: "Keep editing",
+  });
 }

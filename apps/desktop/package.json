@@ -10,16 +10,13 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@outofoffice/calculate": "workspace:*",
     "@outofoffice/commands": "workspace:*",
     "@outofoffice/document-model": "workspace:*",
     "@outofoffice/file-formats": "workspace:*",
-    "@outofoffice/present": "workspace:*",
     "@outofoffice/shared": "workspace:*",
     "@outofoffice/storage": "workspace:*",
     "@outofoffice/ui": "workspace:*",
     "@outofoffice/write": "workspace:*",
-    "@radix-ui/react-tooltip": "1.2.7",
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-dialog": "2.7.1",
     "dompurify": "3.4.11",
