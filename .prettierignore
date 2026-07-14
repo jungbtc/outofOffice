@@ -1,0 +1,4 @@
+pnpm-lock.yaml
+src-tauri/target
+dist
+docs/dependency-licenses.txt

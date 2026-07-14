@@ -1,0 +1,73 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "outofOffice",
+  "version": "0.1.0",
+  "identifier": "com.outofoffice.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../apps/desktop/dist"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; frame-src 'none'",
+      "freezePrototype": true
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "outofOffice",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 760,
+        "minHeight": 560,
+        "resizable": true,
+        "fullscreen": false,
+        "dragDropEnabled": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "outofOffice contributors",
+    "copyright": "Copyright © 2026 outofOffice contributors",
+    "category": "Productivity",
+    "shortDescription": "A local-first open-source office suite",
+    "longDescription": "Create documents, presentations, and spreadsheets locally with outofOffice.",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "fileAssociations": [
+      {
+        "ext": ["oofdoc"],
+        "name": "outofOffice Write document",
+        "description": "outofOffice Write document",
+        "role": "Editor",
+        "mimeType": "application/vnd.outofoffice.document"
+      },
+      {
+        "ext": ["oofslides"],
+        "name": "outofOffice presentation",
+        "description": "outofOffice presentation",
+        "role": "Editor",
+        "mimeType": "application/vnd.outofoffice.presentation"
+      },
+      {
+        "ext": ["oofsheet"],
+        "name": "outofOffice spreadsheet",
+        "description": "outofOffice spreadsheet",
+        "role": "Editor",
+        "mimeType": "application/vnd.outofoffice.spreadsheet"
+      }
+    ],
+    "windows": {
+      "webviewInstallMode": { "type": "offlineInstaller", "silent": true },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "startMenuFolder": "outofOffice",
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+outofOffice
+Copyright © 2026 outofOffice contributors
+
+This product is licensed under the GNU Affero General Public License,
+version 3 only. See LICENSE.
+
+outofOffice is independent software. Microsoft, Windows, Word, PowerPoint,
+Excel, and Microsoft Office are trademarks of the Microsoft group of
+companies. Their names are used only to describe interoperability goals.
+No Microsoft code, branding, icon, template, font, or other proprietary
+asset is included.
+
+The application incorporates open-source software under compatible terms,
+including Apache-2.0, MIT, ISC, BSD, MPL-2.0, and Unicode licenses. A
+generated JavaScript dependency summary is in docs/dependency-licenses.txt.
+Important direct dependencies and their declared licenses:
+
+- Tauri and @tauri-apps/api: Apache-2.0 OR MIT
+- React and React DOM: MIT
+- Zustand: MIT
+- Radix UI: MIT
+- DOMPurify: MPL-2.0 OR Apache-2.0
+- Vite and Vitest: MIT
+- SQLite: public domain; rusqlite: MIT
+- serde, serde_json, uuid, thiserror, and windows-sys: Apache-2.0 OR MIT
+- zip: MIT
+
+The original outofOffice icon and interface assets in this repository are
+licensed with the project under AGPL-3.0-only unless a file says otherwise.

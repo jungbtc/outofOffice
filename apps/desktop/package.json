@@ -1,0 +1,39 @@
+{
+  "name": "@outofoffice/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --configLoader runner --port 1420",
+    "build": "tsc --noEmit -p ../../tsconfig.json && vite build --configLoader runner",
+    "preview": "vite preview --configLoader runner",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@outofoffice/calculate": "workspace:*",
+    "@outofoffice/commands": "workspace:*",
+    "@outofoffice/document-model": "workspace:*",
+    "@outofoffice/file-formats": "workspace:*",
+    "@outofoffice/present": "workspace:*",
+    "@outofoffice/shared": "workspace:*",
+    "@outofoffice/storage": "workspace:*",
+    "@outofoffice/ui": "workspace:*",
+    "@outofoffice/write": "workspace:*",
+    "@radix-ui/react-tooltip": "1.2.7",
+    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-dialog": "2.7.1",
+    "dompurify": "3.4.11",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "zustand": "5.0.6"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.4",
+    "@types/react": "19.1.8",
+    "@types/react-dom": "19.1.6",
+    "@vitejs/plugin-react": "4.7.0",
+    "autoprefixer": "10.4.21",
+    "postcss": "8.5.6",
+    "tailwindcss": "3.4.17"
+  }
+}

@@ -1,0 +1,32 @@
+[package]
+name = "outofoffice"
+version = "0.1.0"
+description = "A local-first open-source office suite"
+authors = ["outofOffice contributors"]
+edition = "2021"
+license = "AGPL-3.0-only"
+repository = "https://github.com/outofoffice/outofoffice"
+
+[lib]
+name = "outofoffice_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "outofOffice"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.4.1", features = [] }
+
+[dependencies]
+rusqlite = { version = "0.32.1", features = ["bundled"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+tauri = { version = "2.11.5", features = [] }
+tauri-plugin-dialog = "2.7.1"
+thiserror = "2.0.12"
+uuid = { version = "1.16.0", features = ["v4"] }
+zip = { version = "2.2.2", default-features = false, features = ["deflate"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59.0", features = ["Win32_Storage_FileSystem"] }

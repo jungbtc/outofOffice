@@ -1,0 +1,10 @@
+{
+  "name": "@outofoffice/file-formats",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@outofoffice/document-model": "workspace:*",
+    "@outofoffice/shared": "workspace:*"
+  }
+}
