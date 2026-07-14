@@ -294,7 +294,8 @@ mod tests {
 
     #[test]
     fn rejects_mismatched_kinds() {
-        let payload = json!({"schemaVersion": 1, "kind": "write", "document": {"kind": "unsupported"}});
+        let payload =
+            json!({"schemaVersion": 1, "kind": "write", "document": {"kind": "unsupported"}});
         assert!(validate_payload(&payload).is_err());
     }
 

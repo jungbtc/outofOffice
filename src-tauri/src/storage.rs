@@ -227,8 +227,7 @@ pub fn list_recovery_records(app: &tauri::AppHandle) -> Result<Vec<RecoveryRecor
     Ok(records
         .into_iter()
         .filter(|record| {
-            snapshot_path(&directory, &record.id, &record.kind)
-                .is_ok_and(|path| path.is_file())
+            snapshot_path(&directory, &record.id, &record.kind).is_ok_and(|path| path.is_file())
         })
         .collect())
 }

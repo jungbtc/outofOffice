@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+# Keep generated application assets byte-for-byte identical.
+*.icns binary
+*.ico binary
+*.png binary
+
+# Windows command scripts require CRLF for broad compatibility.
+*.bat text eol=crlf
+*.cmd text eol=crlf
